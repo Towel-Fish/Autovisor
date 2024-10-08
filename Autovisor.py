@@ -2,6 +2,7 @@
 import asyncio
 import traceback
 import time
+from os import getcwd
 from typing import Tuple
 from res.configs import Config
 from res.progress import get_progress, show_progress
@@ -27,15 +28,24 @@ async def auto_login(config: Config, page: Page):
 
 async def init_page(p: Playwright, config: Config) -> Tuple[Page, Browser]:
     driver = "msedge" if config.driver == "edge" else config.driver
+    
     if not config.exe_path:
         print(f"正在启动{config.driver}浏览器...")
-        browser = await p.chromium.launch(channel=driver, headless=False)
+        browser = await p.chromium.launch_persistent_context(
+            user_data_dir=getcwd() + r"\user_data", 
+            channel=driver,
+            headless=False,
+            )
     else:
         print(f"正在启动{config.driver}浏览器...")
-        browser = await p.chromium.launch(executable_path=config.exe_path, channel=driver, headless=False)
+        browser = await p.chromium.laulaunch_persistent_contextnch(
+            user_data_dir=getcwd() + r"\user_data",
+            executable_path=config.exe_path, 
+            channel=driver, 
+            headless=False
+            )
 
-    context = await browser.new_context()
-    page = await context.new_page()
+    page = browser.pages[0]
     page.set_default_timeout(24 * 3600 * 1000)
     viewsize = await page.evaluate(
         '''() => {

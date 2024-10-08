@@ -13,3 +13,4 @@ __pycache__
 test_config.ini
 .venv
 *.spec
+user_data/
