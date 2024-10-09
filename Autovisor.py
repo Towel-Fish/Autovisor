@@ -84,6 +84,7 @@ async def play_video(page: Page) -> None:
                 print("[Info]检测到被暂停,正在尝试播放.", end="\r")
                 canvas = await page.wait_for_selector(".videoArea", state="attached")
                 await canvas.click()
+                print("\n", end="\r")
         except TimeoutError:
             continue
 
