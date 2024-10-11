@@ -2,7 +2,7 @@
 import asyncio
 import traceback
 import time
-from os import getcwd
+from os import getcwd,environ
 from typing import Tuple
 from res.configs import Config
 from res.progress import get_progress, show_progress
@@ -16,6 +16,40 @@ from res.utils import optimize_page, get_lesson_name, video_optimize, get_filter
 event_loop_verify = asyncio.Event()
 event_loop_answer = asyncio.Event()
 
+#删除chorme或edge中的cookies
+async def del_brower_config(brower: Browser, driver):
+    if driver == "msedge":
+        
+        setting = (
+            'edge://settings/clearBrowserData',          #设置清除的界面
+            "div[role = dialog] input[type = checkbox]", #复选框
+            '#clear-now',                                #清除按钮
+                   )
+    elif driver == "chrome":
+        setting = (
+            'chrome://settings/clearBrowserData', 
+            'div#basic-tab div#checkbox', 
+            '#clearButton',
+                   )
+
+    page_setting = await brower.new_page()
+    await page_setting.goto(setting[0])
+
+    All_checkboxs = await page_setting.query_selector_all(setting[1])
+    for checkboxs in All_checkboxs:
+        await checkboxs.set_checked(checked=True)
+
+    #选择“所有时间”
+    if driver == "msedge":
+        await page_setting.locator('div[role = dialog] button[aria-haspopup]').click()
+        await page_setting.locator('div[role = dialog] div[role = option]:nth-child(5)').click()
+    elif driver == "chrome":
+        await page_setting.locator('div#basic-tab select#dropdownMenu').select_option(label='时间不限')  
+            
+    await page_setting.locator(setting[2]).click()
+    await page_setting.close()
+
+    return
 
 async def auto_login(config: Config, page: Page):
     await page.goto(config.login_url)
@@ -28,23 +62,15 @@ async def auto_login(config: Config, page: Page):
 
 async def init_page(p: Playwright, config: Config) -> Tuple[Page, Browser]:
     driver = "msedge" if config.driver == "edge" else config.driver
-    
-    if not config.exe_path:
-        print(f"正在启动{config.driver}浏览器...")
-        browser = await p.chromium.launch_persistent_context(
-            user_data_dir=getcwd() + r"\user_data", 
-            channel=driver,
-            headless=False,
-            )
-    else:
-        print(f"正在启动{config.driver}浏览器...")
-        browser = await p.chromium.laulaunch_persistent_contextnch(
-            user_data_dir=getcwd() + r"\user_data",
-            executable_path=config.exe_path, 
-            channel=driver, 
-            headless=False
-            )
 
+    print(f"正在启动{config.driver}浏览器...")
+    browser = await p.chromium.launch_persistent_context(
+        user_data_dir = getcwd() + r"\user_data\{}".format(driver),
+        executable_path = config.exe_path if config.exe_path else None,
+        channel = driver,
+        headless = False,
+        )
+    
     page = browser.pages[0]
     page.set_default_timeout(24 * 3600 * 1000)
     viewsize = await page.evaluate(
@@ -54,7 +80,7 @@ async def init_page(p: Playwright, config: Config) -> Tuple[Page, Browser]:
     )
     viewsize["height"] -= 50
     await page.set_viewport_size(viewsize)
-    return page, browser
+    return page, browser, driver
 
 
 async def tail_work(page: Page, start_time, all_class, title) -> bool:
@@ -216,12 +242,17 @@ async def entrance(config: Config):
     tasks = []
     try:
         async with async_playwright() as p:
-            page, browser = await init_page(p, config)
+            page, browser, driver = await init_page(p, config)
             # 进行登录
             if not config.username or not config.password:
                 print("请手动输入账号密码...")
             print("等待登录完成...")
-            await auto_login(config, page)
+            #删除cookies同时加载登陆界面
+            auto_login_task = asyncio.create_task(auto_login(config, page))
+            del_config_task = asyncio.create_task(del_brower_config(browser, driver))
+            tasks.extend([auto_login_task, del_config_task])
+            await asyncio.gather(*tasks, return_exceptions=True)
+            tasks = []
             # 启动协程任务
             skip_ques_task = asyncio.create_task(skip_questions(page, event_loop_answer))
             play_video_task = asyncio.create_task(play_video(page))
