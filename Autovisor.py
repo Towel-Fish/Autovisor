@@ -213,6 +213,8 @@ async def play_video(page: Page) -> None:
                 await page.evaluate('document.querySelector("video").play();')
                 print("[Info]视频已恢复播放.")
         except Exception as e:
+            if isinstance(e, TargetClosedError):
+                break
             continue
 
 
@@ -236,6 +238,8 @@ async def skip_questions(page: Page, event_loop) -> None:
             not_finish_close = await page.query_selector(".el-message-box__headerbtn")
             if not_finish_close:
                 await not_finish_close.click()
+            if isinstance(e, TargetClosedError):
+                break
             continue
 
 
@@ -250,6 +254,8 @@ async def wait_for_verify(page: Page, event_loop) -> None:
             event_loop.set()
             print("\n[Info]安全验证已完成,继续播放...")
         except Exception as e:
+            if isinstance(e, TargetClosedError):
+                break
             continue
 
 
@@ -370,6 +376,8 @@ async def video_optimize(page: Page, config: Config) -> None:
                 await page.evaluate(config.revise_speed_name)
                 print(f"[Info]视频已修改为{config.limitSpeed}倍速.")
         except Exception as e:
+            if isinstance(e, TargetClosedError):
+                break
             continue
         
 async def entrance(config: Config):
