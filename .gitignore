@@ -13,4 +13,6 @@ __pycache__
 test_config.ini
 .venv
 *.spec
+bg.jpg
+block.png
 user_data/
