@@ -377,7 +377,7 @@ async def entrance(config: Config):
             for course_url in config.course_urls:
                 print("[Info]开始加载播放页...")
                 await page.goto(course_url)
-                await page.wait_for_selector(".studytime-div")
+                await page.wait_for_selector(".studytime-div, .layout-inner-content")
                 # 关闭弹窗,优化页面体验
                 await optimize_page(page, config)
                 # 启动课程主循环
