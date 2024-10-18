@@ -14,7 +14,6 @@ from playwright.async_api import TimeoutError
 from playwright._impl._errors import TargetClosedError
 from res.support import show_donate
 from res.utils import optimize_page, get_lesson_name, get_filtered_class, get_video_attr
-from tkinter import messagebox
 from winsound import Beep
 
 
@@ -216,7 +215,7 @@ async def skip_questions(page: Page, event_loop) -> None:
             continue
 
 async def beep():
-    for i in range(0,5):
+    for i in range(0,2):
         Beep(1000,1000)
         await asyncio.sleep(1)
     return
@@ -249,13 +248,13 @@ async def wait_for_verify(page: Page, event_loop) -> None:
     while True:
         try:
             await asyncio.sleep(1)
+            await page.wait_for_selector(".yidun_modal__title", state="attached", timeout=1000)
             print("\n[Warn]检测到安全验证,请手动点击完成...")
             is_ventify =  False
             timea = time.time()
             asyncio.create_task(beep())
             asyncio.create_task(download_img(page))
 
-            messagebox.showwarning('Warning', '检测到安全验证')
             await page.wait_for_selector(".yidun_modal__title", state="hidden", timeout=24 * 3600 * 1000)
             event_loop.set()
             print("\n[Info]安全验证已完成,继续播放...")
