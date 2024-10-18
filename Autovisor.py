@@ -14,11 +14,15 @@ from playwright.async_api import TimeoutError
 from playwright._impl._errors import TargetClosedError
 from res.support import show_donate
 from res.utils import optimize_page, get_lesson_name, get_filtered_class, get_video_attr
+from tkinter import messagebox
+from winsound import Beep
+
 
 # 获取全局事件循环
 event_loop_verify = asyncio.Event()
 event_loop_answer = asyncio.Event()
-
+is_ventify = True
+stop_time = 0
 
 async def auto_login(config: Config, page: Page):
     await page.goto(config.login_url)
@@ -48,6 +52,7 @@ async def auto_login(config: Config, page: Page):
 async def progress_img(page: Page):
     #等待图片加载完成
     if page.locator("div.yidun--loading") != None:
+        print("[info]等待验证图片加载成功")
         await page.wait_for_selector("div.yidun--loading", state="detached")
     #下载图片
     bg_url = await page.locator('img.yidun_bg-img').get_attribute('src')
@@ -122,21 +127,13 @@ async def move_slider(page: Page, distance):
 async def init_page(p: Playwright, config: Config) -> Tuple[Page, Browser]:
     driver = "msedge" if config.driver == "edge" else config.driver
     
-    if not config.exe_path:
-        print(f"正在启动{config.driver}浏览器...")
-        browser = await p.chromium.launch_persistent_context(
-            user_data_dir=getcwd() + r"\user_data", 
-            channel=driver,
-            headless=False,
-            )
-    else:
-        print(f"正在启动{config.driver}浏览器...")
-        browser = await p.chromium.laulaunch_persistent_contextnch(
-            user_data_dir=getcwd() + r"\user_data",
-            executable_path=config.exe_path, 
-            channel=driver, 
-            headless=False
-            )
+    print(f"正在启动{config.driver}浏览器...")
+    browser = await p.chromium.launch_persistent_context(
+        user_data_dir=getcwd() + "\\user_data\\" +driver,
+        executable_path=config.exe_path if config.exe_path else None,
+        channel=driver, 
+        headless=False
+        )
 
     page = browser.pages[0]
     
@@ -194,20 +191,22 @@ async def play_video(page: Page) -> None:
 
 async def skip_questions(page: Page, event_loop) -> None:
     await page.wait_for_load_state("domcontentloaded")
+    global is_ventify
     while True:
         try:
-            await asyncio.sleep(0.5)
-            await page.wait_for_selector(".el-dialog", state="attached", timeout=1000)
-            total_ques = await page.query_selector_all(".number")
-            for ques in total_ques:
-                await ques.click(timeout=500)
-                if not await page.query_selector(".answer"):
-                    choices = await page.query_selector_all(".topic-item")
-                    for each in choices[:2]:
-                        await each.click(timeout=500)
-                        await page.wait_for_timeout(100)
-            await page.press(".el-dialog", "Escape", timeout=1000)
-            event_loop.set()
+            if is_ventify:
+                await asyncio.sleep(1)
+                await page.wait_for_selector(".el-dialog", state="attached", timeout=1000)
+                total_ques = await page.query_selector_all(".number")
+                for ques in total_ques:
+                    await ques.click(timeout=500)
+                    if not await page.query_selector(".answer"):
+                        choices = await page.query_selector_all(".topic-item")
+                        for each in choices[:2]:
+                            await each.click(timeout=500)
+                            await page.wait_for_timeout(100)
+                await page.press(".el-dialog", "Escape", timeout=1000)
+                event_loop.set()
         except Exception as e:
             not_finish_close = await page.query_selector(".el-message-box__headerbtn, .wxtsPop~.wxtsPop .el-dialog__header:has(+.el-dialog__body) .el-dialog__headerbtn")
             if not_finish_close:
@@ -216,17 +215,52 @@ async def skip_questions(page: Page, event_loop) -> None:
                 break
             continue
 
+async def beep():
+    for i in range(0,5):
+        Beep(1000,1000)
+        await asyncio.sleep(1)
+    return
+
+async def download_img(page: Page):
+    try:
+        #遇到安全验证下载4张图片
+        for i in range(0,4):
+            if page.locator("div.yidun--loading") != None:
+                print("\n[info]等待验证图片加载成功")
+            await page.wait_for_selector("div.yidun--loading", state="detached")
+            await page.wait_for_selector(".yidun_modal__title", state="attached", timeout=1000)
+
+            img_url = await page.locator('.yidun .yidun_bg-img').get_attribute('src')
+            img_operation = await page.locator('.yidun .yidun_tips__text').evaluate('node => node.textContent')
+            with open(f"./user_data/ventify_img/{img_operation}.jpg", "wb") as f:
+                f.write(get(img_url).content)
+            await asyncio.sleep(1)
+            page.locator('div.yidun_top__right').click()
+    except Exception as e:
+        print(f"\n[Warn]{repr(e)}")
+        return
+    finally:
+        return
 
 async def wait_for_verify(page: Page, event_loop) -> None:
     await page.wait_for_load_state("domcontentloaded")
+    global is_ventify
+    global stop_time
     while True:
         try:
             await asyncio.sleep(1)
-            await page.wait_for_selector(".yidun_modal__title", state="attached", timeout=1000)
             print("\n[Warn]检测到安全验证,请手动点击完成...")
+            is_ventify =  False
+            timea = time.time()
+            asyncio.create_task(beep())
+            asyncio.create_task(download_img(page))
+
+            messagebox.showwarning('Warning', '检测到安全验证')
             await page.wait_for_selector(".yidun_modal__title", state="hidden", timeout=24 * 3600 * 1000)
             event_loop.set()
             print("\n[Info]安全验证已完成,继续播放...")
+            stop_time += (time.time() - timea)/60
+            is_ventify = True
         except Exception as e:
             if isinstance(e, TargetClosedError):
                 break
@@ -255,7 +289,7 @@ async def learning_loop(page: Page, config: Config):
         timer = 0
         while curtime != "100%":
             try:
-                time_period = (time.time() - start_time) / 60
+                time_period = (time.time() - start_time) / 60 - stop_time
                 timer += 1
                 if 0 < config.limitMaxTime <= time_period:
                     break
@@ -272,7 +306,7 @@ async def learning_loop(page: Page, config: Config):
                     print(f"\n[Warn]{repr(e)}")
         if "current_play" in await all_class[cur_index].get_attribute('class'):
             cur_index += 1
-        reachTimeLimit = await tail_work(page, start_time, all_class, title)
+        reachTimeLimit = await tail_work(page, start_time, stop_time, all_class, title)
         if reachTimeLimit:
             return
 
@@ -297,11 +331,11 @@ async def reviewing_loop(page: Page, config: Config):
         start_time = time.time()
         timer = 0
         while True:
-            est_time = (time.time() - start_time) * config.limitSpeed
+            est_time = (time.time() - start_time - stop_time) * config.limitSpeed
             if est_time > total_time:
                 break
             try:
-                time_period = (time.time() - course_start_time) / 60
+                time_period = (time.time() - course_start_time - stop_time) / 60
                 timer += 1
                 if 0 < config.limitMaxTime <= time_period:
                     break
@@ -321,10 +355,10 @@ async def reviewing_loop(page: Page, config: Config):
         if reachTimeLimit:
             return
 
-async def tail_work(page: Page, start_time, all_class, title) -> bool:
+async def tail_work(page: Page, start_time, stop_time,all_class, title) -> bool:
     reachTimeLimit = False
     page.set_default_timeout(24 * 3600 * 1000)
-    time_period = (time.time() - start_time) / 60
+    time_period = (time.time() - start_time) / 60 - stop_time
     if 0 < config.limitMaxTime <= time_period:
         print(f"\n当前课程已达时限:{config.limitMaxTime}min\n即将进入下门课程!")
         reachTimeLimit = True
