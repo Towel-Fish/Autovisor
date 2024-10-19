@@ -205,9 +205,12 @@ async def skip_questions(page: Page, event_loop) -> None:
                             await each.click(timeout=500)
                             await page.wait_for_timeout(100)
                 await page.press(".el-dialog", "Escape", timeout=1000)
+            not_finish_close = await page.query_selector(".el-message-box__headerbtn, .wxtsPop~.wxtsPop .el-dialog__header:has(+.el-dialog__body) .el-dialog__headerbtn i")
+            if not_finish_close:
+                await not_finish_close.click()
                 event_loop.set()
         except Exception as e:
-            not_finish_close = await page.query_selector(".el-message-box__headerbtn, .wxtsPop~.wxtsPop .el-dialog__header:has(+.el-dialog__body) .el-dialog__headerbtn")
+            not_finish_close = await page.query_selector(".el-message-box__headerbtn, .wxtsPop~.wxtsPop .el-dialog__header:has(+.el-dialog__body) .el-dialog__headerbtn i")
             if not_finish_close:
                 await not_finish_close.click()
             if isinstance(e, TargetClosedError):
